@@ -1,3 +1,5 @@
+# phase2_web.py
+
 from flask import Flask, request
 import sqlite3, hashlib, re, threading, webbrowser
 
@@ -19,9 +21,28 @@ def init_db():
                 (hashlib.sha256(b"bobpass").hexdigest(),))
     conn.commit(); conn.close()
 
+BASE_HTML = '''<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body {{ display: flex; justify-content: center; align-items: center; height: 100vh; background: #f0f4f8; margin: 0; }}
+    .container {{ background: #e0f3ff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); width: 300px; text-align: center; }}
+    input {{ width: 100%; padding: 8px; margin: 8px 0; box-sizing: border-box; }}
+    button {{ padding: 8px 16px; margin-top: 10px; }}
+    a {{ margin: 0 5px; }}
+  </style>
+</head>
+<body>
+  <div class="container">
+    {content}
+  </div>
+</body>
+</html>'''
+
 @app.route("/")
 def index():
-    content = '<h2>Phase 2: Secure Login</h2>' + \
+    content = '<h2>Phase 2: Secure Login</h2>' + \
               '<a href="/register">Register</a> | ' + \
               '<a href="/login">Login</a>'
     return BASE_HTML.format(content=content)
@@ -35,7 +56,7 @@ def register():
             return BASE_HTML.format(content="<p style='color:red;'>Invalid username.</p><a href='/register'>Try again</a>")
         hp = hashlib.sha256(p.encode()).hexdigest()
         conn = sqlite3.connect(DB); cur = conn.cursor()
-        cur.execute("INSERT INTO users VALUES(?,?)", (u, hp))  # SAFE
+        cur.execute("INSERT INTO users VALUES(?,?)", (u, hp))
         conn.commit(); conn.close()
         return BASE_HTML.format(content=f"<p>Registered <b>{u}</b>.</p><a href='/'>Home</a>")
     form = '''<h3>Register</h3>
@@ -55,7 +76,7 @@ def login():
             return BASE_HTML.format(content="<p style='color:red;'>Invalid username.</p><a href='/login'>Try again</a>")
         hp = hashlib.sha256(p.encode()).hexdigest()
         conn = sqlite3.connect(DB); cur = conn.cursor()
-        cur.execute("SELECT * FROM users WHERE username=? AND password=?", (u, hp))  # SAFE
+        cur.execute("SELECT * FROM users WHERE username=? AND password=?", (u, hp))
         ok = bool(cur.fetchone()); conn.close()
         msg = "<p style='color:green;'>Login successful!</p>" if ok else "<p style='color:red;'>Login failed.</p>"
         return BASE_HTML.format(content=msg + '<a href="/">Home</a>')

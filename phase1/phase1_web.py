@@ -1,3 +1,5 @@
+# phase1_web.py
+
 from flask import Flask, request
 import sqlite3, hashlib, threading, webbrowser
 
@@ -24,11 +26,11 @@ BASE_HTML = '''<!DOCTYPE html>
 <head>
   <meta charset="utf-8">
   <style>
-    body { display: flex; justify-content: center; align-items: center; height: 100vh; background: #f0f4f8; margin: 0; }
-    .container { background: #e0f3ff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); width: 300px; text-align: center; }
-    input { width: 100%; padding: 8px; margin: 8px 0; box-sizing: border-box; }
-    button { padding: 8px 16px; margin-top: 10px; }
-    a { margin: 0 5px; }
+    body {{ display: flex; justify-content: center; align-items: center; height: 100vh; background: #f0f4f8; margin: 0; }}
+    .container {{ background: #e0f3ff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); width: 300px; text-align: center; }}
+    input {{ width: 100%; padding: 8px; margin: 8px 0; box-sizing: border-box; }}
+    button {{ padding: 8px 16px; margin-top: 10px; }}
+    a {{ margin: 0 5px; }}
   </style>
 </head>
 <body>
@@ -40,7 +42,7 @@ BASE_HTML = '''<!DOCTYPE html>
 
 @app.route("/")
 def index():
-    content = '<h2>Phase 1: Vulnerable Login</h2>' + \
+    content = '<h2>Phase 1: Vulnerable Login</h2>' + \
               '<a href="/register">Register</a> | ' + \
               '<a href="/login">Login</a>'
     return BASE_HTML.format(content=content)
@@ -52,7 +54,7 @@ def register():
         p = request.form["password"]
         hp = hashlib.sha256(p.encode()).hexdigest()
         conn = sqlite3.connect(DB); cur = conn.cursor()
-        cur.execute(f"INSERT INTO users VALUES('{u}','{hp}');")  # VULNERABLE
+        cur.execute(f"INSERT INTO users VALUES('{u}','{hp}');")
         conn.commit(); conn.close()
         return BASE_HTML.format(content=f"<p>Registered <b>{u}</b>.</p><a href='/'>Home</a>")
     form = '''<h3>Register</h3>

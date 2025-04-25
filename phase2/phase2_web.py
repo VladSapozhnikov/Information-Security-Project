@@ -19,59 +19,55 @@ def init_db():
                 (hashlib.sha256(b"bobpass").hexdigest(),))
     conn.commit(); conn.close()
 
-def valid_username(u):
-    return re.fullmatch(r"[A-Za-z0-9_]{3,20}", u)
-
 @app.route("/")
 def index():
-    return """
-      <h1>Phase 2: Secure Login</h1>
-      <a href="/register">Register</a> | <a href="/login">Login</a>
-    """
+    content = '<h2>Phase 2: Secure Login</h2>' + \
+              '<a href="/register">Register</a> | ' + \
+              '<a href="/login">Login</a>'
+    return BASE_HTML.format(content=content)
 
 @app.route("/register", methods=["GET","POST"])
 def register():
-    if request.method=="POST":
+    if request.method == "POST":
         u = request.form["username"].strip()
         p = request.form["password"]
-        if not valid_username(u):
-            return "<p>Invalid username.</p><a href='/register'>Try again</a>"
+        if not re.fullmatch(r"[A-Za-z0-9_]{3,20}", u):
+            return BASE_HTML.format(content="<p style='color:red;'>Invalid username.</p><a href='/register'>Try again</a>")
         hp = hashlib.sha256(p.encode()).hexdigest()
         conn = sqlite3.connect(DB); cur = conn.cursor()
-        # SAFE:
-        cur.execute("INSERT INTO users VALUES(?,?)", (u, hp))
+        cur.execute("INSERT INTO users VALUES(?,?)", (u, hp))  # SAFE
         conn.commit(); conn.close()
-        return f"<p>Registered {u}.</p><a href='/'>Home</a>"
-    return """
-      <form method="post">
-        Username: <input name="username"><br>
-        Password: <input name="password" type="password"><br>
-        <button type="submit">Register</button>
-      </form>
-    """
+        return BASE_HTML.format(content=f"<p>Registered <b>{u}</b>.</p><a href='/'>Home</a>")
+    form = '''<h3>Register</h3>
+<form method="post">
+  <input name="username" placeholder="Username"><br>
+  <input name="password" type="password" placeholder="Password"><br>
+  <button type="submit">Register</button>
+</form>'''
+    return BASE_HTML.format(content=form)
 
 @app.route("/login", methods=["GET","POST"])
 def login():
-    if request.method=="POST":
+    if request.method == "POST":
         u = request.form["username"].strip()
         p = request.form["password"]
-        if not valid_username(u):
-            return "<p>Invalid username.</p><a href='/login'>Try again</a>"
+        if not re.fullmatch(r"[A-Za-z0-9_]{3,20}", u):
+            return BASE_HTML.format(content="<p style='color:red;'>Invalid username.</p><a href='/login'>Try again</a>")
         hp = hashlib.sha256(p.encode()).hexdigest()
         conn = sqlite3.connect(DB); cur = conn.cursor()
-        # SAFE:
-        cur.execute("SELECT * FROM users WHERE username=? AND password=?", (u, hp))
+        cur.execute("SELECT * FROM users WHERE username=? AND password=?", (u, hp))  # SAFE
         ok = bool(cur.fetchone()); conn.close()
-        return ("<p>Login successful!</p>" if ok else "<p>Login failed.</p>") + "<a href='/'>Home</a>"
-    return """
-      <form method="post">
-        Username: <input name="username"><br>
-        Password: <input name="password" type="password"><br>
-        <button type="submit">Login</button>
-      </form>
-    """
+        msg = "<p style='color:green;'>Login successful!</p>" if ok else "<p style='color:red;'>Login failed.</p>"
+        return BASE_HTML.format(content=msg + '<a href="/">Home</a>')
+    form = '''<h3>Login</h3>
+<form method="post">
+  <input name="username" placeholder="Username"><br>
+  <input name="password" type="password" placeholder="Password"><br>
+  <button type="submit">Login</button>
+</form>'''
+    return BASE_HTML.format(content=form)
 
-if __name__=="__main__":
+if __name__ == "__main__":
     init_db()
-    threading.Timer(1.0, lambda: webbrowser.open("http://127.0.0.1:5001/")).start()
+    threading.Timer(1.0, lambda: webbrowser.open("http://127.0.0.1:5001/", new=2)).start()
     app.run(debug=True, port=5001)

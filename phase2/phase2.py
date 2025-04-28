@@ -3,11 +3,12 @@ import sqlite3, os, re
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
 
-# Secure DB name for phase 2
+# Secure DB filename for Phase 2
 DB = "SapozhnikovSafeDB.db"
-KEY = b'my_32_byte_super_secret_key________'
+# Same 32-byte key for AES-256
+KEY = b'0123456789ABCDEF0123456789ABCDEF'
 
-# encrypt_pw and decrypt_pw: AES-256 CBC encryption/decryption
+# AES-256 encryption/decryption helpers
 def encrypt_pw(pw: str) -> str:
     iv = os.urandom(AES.block_size)
     cipher = AES.new(KEY, AES.MODE_CBC, iv)
@@ -20,11 +21,11 @@ def decrypt_pw(hex_str: str) -> str:
     cipher = AES.new(KEY, AES.MODE_CBC, iv)
     return unpad(cipher.decrypt(ct), AES.block_size).decode()
 
-# valid_username: ensures only letters, digits, underscore; length 3-20
+# valid_username: input validation blocks SQLi payloads
 def valid_username(u: str) -> bool:
     return bool(re.fullmatch(r"[A-Za-z0-9_]{3,20}", u))
 
-# init_db: create table and sample users securely encrypted
+# init_db: creates table and sample users securely
 def init_db():
     conn = sqlite3.connect(DB)
     cur = conn.cursor()
@@ -37,36 +38,30 @@ def init_db():
     for u, p in [('alice','alicepass'),('bob','bobpass')]:
         hp = encrypt_pw(p)
         cur.execute("INSERT OR IGNORE INTO users VALUES(?,?)", (u, hp))
-    conn.commit()
-    conn.close()
+    conn.commit(); conn.close()
 
-# register: secure registration with validation + parameterized query
+# Secure registration: validation + parameterized query
 def register():
     u = input("New username: ").strip()
     if not valid_username(u):
-        print("❌ Invalid username.")  # input validation blocks SQLi
+        print("❌ Invalid username.")
         return
     p = input("New password: ")
     hp = encrypt_pw(p)
-    conn = sqlite3.connect(DB)
-    cur = conn.cursor()
-    # safe INSERT using placeholders
+    conn = sqlite3.connect(DB); cur = conn.cursor()
     cur.execute("INSERT INTO users VALUES(?,?)", (u, hp))
-    conn.commit()
-    conn.close()
+    conn.commit(); conn.close()
     print("Registered.")
 
-# login: secure login using parameterized SELECT
+# Secure login: uses parameterized SELECT to prevent SQLi
 def login():
     u = input("Username: ").strip()
+    p = input("Password: ")
     if not valid_username(u):
         print("❌ Invalid username.")
         return
-    p = input("Password: ")
     hp = encrypt_pw(p)
-    conn = sqlite3.connect(DB)
-    cur = conn.cursor()
-    # safe SELECT prevents SQLi
+    conn = sqlite3.connect(DB); cur = conn.cursor()
     cur.execute("SELECT * FROM users WHERE username=? AND password=?", (u, hp))
     if cur.fetchone():
         print("🔥 Login successful!")
@@ -75,10 +70,10 @@ def login():
     conn.close()
 
 if __name__ == "__main__":
-    init_db()                           # setup database
+    init_db()
     choice = input("Register (R) or Login (L)? ").strip().lower()
     if choice == 'r':
         register()
     else:
         login()
-    print("\n-- Phase 2 is now protected; same payloads should fail.")
+    print("\n-- Phase 2 protected; same payloads now fail.")

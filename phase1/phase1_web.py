@@ -3,7 +3,7 @@
 from flask import Flask, request
 import sqlite3, hashlib, threading, webbrowser
 
-DB = "users.db"
+DB = "SapozhnikovDB.db"
 app = Flask(__name__)
 
 def init_db():

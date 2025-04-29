@@ -1,15 +1,13 @@
-# phase1_web.py
-
 from flask import Flask, request
 import sqlite3, threading, webbrowser, os
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad
 
-# Database & AES key setup
+# Database + AES key
 DB = "SapozhnikovDB.db"
-KEY = b'0123456789ABCDEF0123456789ABCDEF'  # 32-byte key
+KEY = b'0123456789ABCDEF0123456789ABCDEF'
 
-# HTML template with escaped braces
+# HTML with escaped braces
 BASE_HTML = '''<!DOCTYPE html>
 <html>
 <head>
@@ -39,15 +37,13 @@ def encrypt_pw(pw: str) -> str:
     ct = cipher.encrypt(pad(pw.encode(), AES.block_size))
     return (iv + ct).hex()
 
-# Home page
 @app.route("/")
 def index():
-    content = '<h2>Phase 1: Vulnerable Login</h2>' \
-              + '<a href="/register">Register</a> | ' \
-              + '<a href="/login">Login</a>'
+    content = '<h2>Phase 1: Vulnerable Login</h2>' + \
+              '<a href="/register">Register</a> | ' + \
+              '<a href="/login">Login</a>'
     return BASE_HTML.format(content=content)
 
-# Registration
 @app.route("/register", methods=["GET","POST"])
 def register():
     if request.method == "POST":
@@ -55,7 +51,6 @@ def register():
         p = request.form["password"]
         hp = encrypt_pw(p)
         conn = sqlite3.connect(DB); cur = conn.cursor()
-        # Vulnerable insert
         cur.execute(f"INSERT INTO users VALUES('{u}','{hp}');")
         conn.commit(); conn.close()
         return BASE_HTML.format(content=f"<p>Registered <b>{u}</b>.</p><a href='/'>Home</a>")
@@ -67,7 +62,6 @@ def register():
 </form>'''
     return BASE_HTML.format(content=form)
 
-# Login with SQLi demonstration + DROP support
 @app.route("/login", methods=["GET","POST"])
 def login():
     if request.method == "POST":
@@ -75,11 +69,9 @@ def login():
         p = request.form["password"]
         hp = encrypt_pw(p)
         conn = sqlite3.connect(DB); cur = conn.cursor()
-
         query = f"SELECT * FROM users WHERE username='{u}' AND password='{hp}';"
         print("Running:", query)
 
-        # If attacker injected DROP TABLE, allow multi-statement
         if 'DROP TABLE' in query.upper():
             try:
                 cur.executescript(query)
@@ -87,19 +79,18 @@ def login():
                 content = "<p style='color:green;'>Table 'users' dropped!</p>"
             except Exception as e:
                 conn.close()
-                content = f"<p style='color:red;'>Error executing DROP: {e}</p>"
+                content = f"<p style='color:red;'>Error: {e}</p>"
         else:
-            # Normal SELECT
             cur.execute(query)
             rows = cur.fetchall()
             conn.close()
-            if rows:
+            if 'UNION SELECT' in query.upper():
                 list_items = "".join(f"<li>{r[0]} : {r[1]}</li>" for r in rows)
+                content = "<p style='color:green;'>Login successful!</p>" + f"<ul>{list_items}</ul>"
+            elif rows:
                 content = "<p style='color:green;'>Login successful!</p>"
-                content += f"<ul>{list_items}</ul>"
             else:
                 content = "<p style='color:red;'>Login failed.</p>"
-
         content += '<p><a href="/">Home</a></p>'
         return BASE_HTML.format(content=content)
 
@@ -112,7 +103,7 @@ def login():
     return BASE_HTML.format(content=form)
 
 if __name__ == "__main__":
-    # Initialize DB and sample data
+    # Initialize DB
     conn = sqlite3.connect(DB)
     cur = conn.cursor()
     cur.execute("""
@@ -125,7 +116,5 @@ if __name__ == "__main__":
         hp = encrypt_pw(p)
         cur.execute("INSERT OR IGNORE INTO users VALUES(?,?)", (u, hp))
     conn.commit(); conn.close()
-
-    # Launch browser
     threading.Timer(1.0, lambda: webbrowser.open("http://127.0.0.1:5000/", new=2)).start()
     app.run(debug=True)

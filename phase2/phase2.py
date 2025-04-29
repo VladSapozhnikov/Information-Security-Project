@@ -2,7 +2,7 @@ import sqlite3, os, re
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
 
-# Secure DB filename for Phase 2
+# Secure DB
 DB = "SapozhnikovSafeDB.db"
 # Same 32-byte key for AES-256
 KEY = b'0123456789ABCDEF0123456789ABCDEF'

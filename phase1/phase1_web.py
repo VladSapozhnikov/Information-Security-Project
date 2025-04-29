@@ -5,11 +5,11 @@ import sqlite3, threading, webbrowser, os
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad
 
-# Database and AES setup
+# Database & AES key setup
 DB = "SapozhnikovDB.db"
 KEY = b'0123456789ABCDEF0123456789ABCDEF'  # 32-byte key
 
-# HTML template (CSS braces escaped)
+# HTML template with escaped braces
 BASE_HTML = '''<!DOCTYPE html>
 <html>
 <head>
@@ -42,12 +42,12 @@ def encrypt_pw(pw: str) -> str:
 # Home page
 @app.route("/")
 def index():
-    content = '<h2>Phase 1: Vulnerable Login</h2>' + \
-              '<a href="/register">Register</a> | ' + \
-              '<a href="/login">Login</a>'
+    content = '<h2>Phase 1: Vulnerable Login</h2>' \
+              + '<a href="/register">Register</a> | ' \
+              + '<a href="/login">Login</a>'
     return BASE_HTML.format(content=content)
 
-# Registration page
+# Registration
 @app.route("/register", methods=["GET","POST"])
 def register():
     if request.method == "POST":
@@ -55,6 +55,7 @@ def register():
         p = request.form["password"]
         hp = encrypt_pw(p)
         conn = sqlite3.connect(DB); cur = conn.cursor()
+        # Vulnerable insert
         cur.execute(f"INSERT INTO users VALUES('{u}','{hp}');")
         conn.commit(); conn.close()
         return BASE_HTML.format(content=f"<p>Registered <b>{u}</b>.</p><a href='/'>Home</a>")
@@ -66,7 +67,7 @@ def register():
 </form>'''
     return BASE_HTML.format(content=form)
 
-# Login page with SQLi display
+# Login with SQLi demonstration + DROP support
 @app.route("/login", methods=["GET","POST"])
 def login():
     if request.method == "POST":
@@ -77,16 +78,27 @@ def login():
 
         query = f"SELECT * FROM users WHERE username='{u}' AND password='{hp}';"
         print("Running:", query)
-        cur.execute(query)
-        rows = cur.fetchall()
-        conn.close()
 
-        if rows:
-            list_items = "".join(f"<li>{r[0]} : {r[1]}</li>" for r in rows)
-            content = "<p style='color:green;'>Login successful!</p>"
-            content += f"<ul>{list_items}</ul>"
+        # If attacker injected DROP TABLE, allow multi-statement
+        if 'DROP TABLE' in query.upper():
+            try:
+                cur.executescript(query)
+                conn.close()
+                content = "<p style='color:green;'>Table 'users' dropped!</p>"
+            except Exception as e:
+                conn.close()
+                content = f"<p style='color:red;'>Error executing DROP: {e}</p>"
         else:
-            content = "<p style='color:red;'>Login failed.</p>"
+            # Normal SELECT
+            cur.execute(query)
+            rows = cur.fetchall()
+            conn.close()
+            if rows:
+                list_items = "".join(f"<li>{r[0]} : {r[1]}</li>" for r in rows)
+                content = "<p style='color:green;'>Login successful!</p>"
+                content += f"<ul>{list_items}</ul>"
+            else:
+                content = "<p style='color:red;'>Login failed.</p>"
 
         content += '<p><a href="/">Home</a></p>'
         return BASE_HTML.format(content=content)
@@ -114,6 +126,6 @@ if __name__ == "__main__":
         cur.execute("INSERT OR IGNORE INTO users VALUES(?,?)", (u, hp))
     conn.commit(); conn.close()
 
-    # Launch in browser
+    # Launch browser
     threading.Timer(1.0, lambda: webbrowser.open("http://127.0.0.1:5000/", new=2)).start()
     app.run(debug=True)

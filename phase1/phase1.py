@@ -60,7 +60,7 @@ def login():
     # --------------------------
     print("Running:", query)
 
-    # Execute potentially multi-statement script if attacker dropped table
+    # Dropped table Alert
     if 'DROP TABLE' in query.upper():
         cur.executescript(query)
         conn.close()

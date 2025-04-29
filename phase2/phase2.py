@@ -1,4 +1,3 @@
-# phase2.py
 import sqlite3, os, re
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
@@ -62,6 +61,7 @@ def login():
         return
     hp = encrypt_pw(p)
     conn = sqlite3.connect(DB); cur = conn.cursor()
+    # prepared statement
     cur.execute("SELECT * FROM users WHERE username=? AND password=?", (u, hp))
     if cur.fetchone():
         print("🔥 Login successful!")

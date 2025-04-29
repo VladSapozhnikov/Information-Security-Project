@@ -1,14 +1,13 @@
-# phase1.py
 import sqlite3, os
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad
 
-# Database filename named after your last name
+# Database filename name
 DB = "SapozhnikovDB.db"
-# 32-byte key for AES-256 encryption (must be exactly 32 bytes)
+# 32-byte key for AES-256 encryption
 KEY = b'0123456789ABCDEF0123456789ABCDEF'
 
-# encrypt_pw: encrypts plaintext password using AES-256 CBC
+# encrypt_pw: encrypts plaintext password using AES-256
 # returns hex string containing IV + ciphertext
 def encrypt_pw(pw: str) -> str:
     iv = os.urandom(AES.block_size)

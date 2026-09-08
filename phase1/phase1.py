@@ -1,94 +1,59 @@
-import sqlite3, os
-from Crypto.Cipher import AES
-from Crypto.Util.Padding import pad
+"""Deliberately vulnerable SQL injection lab using synthetic accounts."""
+from contextlib import closing
+from pathlib import Path
+import sqlite3
+import hashlib
 
-# Database and AES key setup
-DB = "SapozhnikovDB.db"
-KEY = b'0123456789ABCDEF0123456789ABCDEF'  # 32-byte AES key
+DB = Path(__file__).with_name("demo_vulnerable.sqlite3")
 
-# Helper: AES-256 encrypts password, returns hex string of IV+ciphertext
-def encrypt_pw(pw: str) -> str:
-    iv = os.urandom(AES.block_size)
-    cipher = AES.new(KEY, AES.MODE_CBC, iv)
-    ct = cipher.encrypt(pad(pw.encode(), AES.block_size))
-    return (iv + ct).hex()
 
-# Initialize database and insert sample users
-# Vulnerable code uses static AES encryption but no SQL protections
+def hash_pw(password):
+    # Deliberately weak storage for the vulnerable half of this local lab.
+    return hashlib.sha256(password.encode()).hexdigest()
+
+
 def init_db():
-    conn = sqlite3.connect(DB)
-    cur = conn.cursor()
-    cur.execute("""
-      CREATE TABLE IF NOT EXISTS users(
-        username TEXT PRIMARY KEY,
-        password TEXT
-      );
-    """)
-    # Insert test users
-    for u, p in [('alice','alicepass'),('bob','bobpass')]:
-        hp = encrypt_pw(p)
-        cur.execute("INSERT OR IGNORE INTO users VALUES(?,?)", (u, hp))
-    conn.commit()
-    conn.close()
+    with closing(sqlite3.connect(DB)) as conn, conn:
+        conn.execute("CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, password TEXT)")
+        for username, password in [("alice", "alicepass"), ("bob", "bobpass")]:
+            conn.execute("INSERT OR IGNORE INTO users VALUES (?, ?)", (username, hash_pw(password)))
 
-# Vulnerable registration: SQL injection possible if attackers alter INSERT f-string
-def register():
-    u = input("New username: ")     # attacker can include SQL keywords here
-    p = input("New password: ")
-    hp = encrypt_pw(p)
-    conn = sqlite3.connect(DB); cur = conn.cursor()
-    # VULNERABILITY: direct f-string insertion allows injection in VALUES()
-    cur.execute(f"INSERT INTO users VALUES('{u}','{hp}');")
-    conn.commit(); conn.close()
-    print("Registered.")
 
-# Vulnerable login: builds SQL with user input, allows 3 attacks:
-# 1) Authentication bypass, 2) Credential dump, 3) DROP table
-def login():
-    u = input("Username: ")        # attacker-controlled input
-    p = input("Password: ")
-    hp = encrypt_pw(p)
-    conn = sqlite3.connect(DB); cur = conn.cursor()
+def register_user(username, password):
+    # Intentionally unsafe: user input becomes part of the SQL statement.
+    with closing(sqlite3.connect(DB)) as conn, conn:
+        conn.execute(f"INSERT INTO users VALUES ('{username}', '{hash_pw(password)}')")
 
-    # VULNERABILITY: dynamic SQL with f-string
-    # --------------------------
-    # This line can be broken by:
-    # 1) "' OR '1'='1'--" to bypass auth
-    # 2) "' UNION SELECT username,password FROM users--" to dump creds
-    # 3) "'; DROP TABLE users;--" to delete table
-    query = f"SELECT * FROM users WHERE username='{u}' AND password='{hp}';"
-    # --------------------------
-    print("Running:", query)
 
-    # Dropped table Alert
-    if 'DROP TABLE' in query.upper():
-        cur.executescript(query)
-        conn.close()
-        print("⚠️ Table dropped!")
-        return
+def lookup_users(username, password):
+    query = f"SELECT username, password FROM users WHERE username='{username}' AND password='{hash_pw(password)}'"
+    with closing(sqlite3.connect(DB)) as conn:
+        return conn.execute(query).fetchall()
 
-    # Normal SELECT for bypass or dump
-    cur.execute(query)
-    rows = cur.fetchall()
-    conn.close()
 
-    # Determine outcome
-    if 'UNION SELECT' in query.upper():
-        # Attack 2: Dump credentials
-        print("🔥 Dumping credentials:")
-        for r in rows:
-            print(f"- {r[0]} : {r[1]}")
-    elif rows:
-        # Attack 1: Authentication bypass or valid login
-        print("🔥 Login successful!")
-    else:
-        print("❌ Login failed.")
-
-if __name__ == "__main__":
+def main():
     init_db()
     choice = input("Register (R) or Login (L)? ").strip().lower()
-    if choice == 'r':
-        register()
-    else:
-        login()
-    print("\n-- Try SQLi payloads: (1) ' OR '1'='1'--  (2) ' UNION SELECT username,password FROM users--  (3) '; DROP TABLE users;--")
+    username = input("Username: ")
+    password = input("Password (use demo values only): ")
+    if not username or not password or len(username) > 200 or len(password) > 1024:
+        print("Enter a username and password within the demo limits.")
+        return
+    try:
+        if choice == "r":
+            register_user(username, password)
+            print("Registered.")
+        else:
+            rows = lookup_users(username, password)
+            print("Login successful!" if rows else "Login failed.")
+            if "UNION SELECT" in username.upper():
+                for user, stored_hash in rows:
+                    print(f"{user}: {stored_hash}")
+    except sqlite3.IntegrityError:
+        print("That username already exists.")
+    except sqlite3.Error:
+        print("Invalid SQL input. The demo accepts one statement per request.")
+
+
+if __name__ == "__main__":
+    main()

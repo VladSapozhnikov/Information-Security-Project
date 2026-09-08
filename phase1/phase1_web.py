@@ -1,13 +1,15 @@
+"""Local web interface for the deliberately vulnerable SQL injection lab."""
 from flask import Flask, request
-import sqlite3, threading, webbrowser, os
-from Crypto.Cipher import AES
-from Crypto.Util.Padding import pad
+from html import escape
+import sqlite3
 
-# Database + AES key
-DB = "SapozhnikovDB.db"
-KEY = b'0123456789ABCDEF0123456789ABCDEF'
+if __package__:
+    from . import phase1 as demo
+else:
+    import phase1 as demo
 
-# HTML with escaped braces
+app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = 16 * 1024
 BASE_HTML = '''<!DOCTYPE html>
 <html>
 <head>
@@ -29,92 +31,66 @@ BASE_HTML = '''<!DOCTYPE html>
 </body>
 </html>'''
 
-app = Flask(__name__)
 
-def encrypt_pw(pw: str) -> str:
-    iv = os.urandom(AES.block_size)
-    cipher = AES.new(KEY, AES.MODE_CBC, iv)
-    ct = cipher.encrypt(pad(pw.encode(), AES.block_size))
-    return (iv + ct).hex()
+def page(content):
+    return BASE_HTML.format(content=content)
+
+
+def form(action):
+    return page(f"""<h3>{action.title()}</h3>
+<form method="post">
+  <input name="username" placeholder="Username" required maxlength="200"><br>
+  <input name="password" type="password" placeholder="Password" required maxlength="1024"><br>
+  <button type="submit">{action.title()}</button>
+</form>
+<p>Local lab. Use demo accounts only.</p><a href="/">Home</a>""")
+
 
 @app.route("/")
 def index():
-    content = '<h2>Phase 1: Vulnerable Login</h2>' + \
-              '<a href="/register">Register</a> | ' + \
-              '<a href="/login">Login</a>'
-    return BASE_HTML.format(content=content)
+    return page('<h2>Phase 1: Vulnerable Login</h2>'
+                '<p>SQL injection learning lab</p>'
+                '<a href="/register">Register</a> | <a href="/login">Login</a>')
 
-@app.route("/register", methods=["GET","POST"])
+
+@app.route("/register", methods=["GET", "POST"])
 def register():
-    if request.method == "POST":
-        u = request.form["username"]
-        p = request.form["password"]
-        hp = encrypt_pw(p)
-        conn = sqlite3.connect(DB); cur = conn.cursor()
-        cur.execute(f"INSERT INTO users VALUES('{u}','{hp}');")
-        conn.commit(); conn.close()
-        return BASE_HTML.format(content=f"<p>Registered <b>{u}</b>.</p><a href='/'>Home</a>")
-    form = '''<h3>Register</h3>
-<form method="post">
-  <input name="username" placeholder="Username"><br>
-  <input name="password" type="password" placeholder="Password"><br>
-  <button type="submit">Register</button>
-</form>'''
-    return BASE_HTML.format(content=form)
+    if request.method == "GET":
+        return form("register")
+    username = request.form.get("username", "").strip()
+    password = request.form.get("password", "")
+    if not username or not password or len(username) > 200 or len(password) > 1024:
+        return page("<p>Enter a username and password within the demo limits.</p>"), 400
+    try:
+        demo.register_user(username, password)
+    except ValueError as error:
+        return page(f"<p>{escape(str(error))}</p>"), 400
+    except sqlite3.IntegrityError:
+        return page("<p>That username already exists.</p>"), 409
+    except sqlite3.Error:
+        return page("<p>Invalid SQL input.</p>"), 400
+    return page(f"<p>Registered <b>{escape(username)}</b>.</p><a href='/'>Home</a>"), 201
 
-@app.route("/login", methods=["GET","POST"])
+
+@app.route("/login", methods=["GET", "POST"])
 def login():
-    if request.method == "POST":
-        u = request.form["username"]
-        p = request.form["password"]
-        hp = encrypt_pw(p)
-        conn = sqlite3.connect(DB); cur = conn.cursor()
-        query = f"SELECT * FROM users WHERE username='{u}' AND password='{hp}';"
-        print("Running:", query)
+    if request.method == "GET":
+        return form("login")
+    username = request.form.get("username", "").strip()
+    password = request.form.get("password", "")
+    if not username or not password or len(username) > 200 or len(password) > 1024:
+        return page("<p>Enter a username and password within the demo limits.</p>"), 400
+    try:
+        rows = demo.lookup_users(username, password)
+    except sqlite3.Error:
+        return page("<p>Invalid SQL input. Only one SQL statement is accepted.</p>"), 400
+    content = "<p>Login successful!</p>" if rows else "<p>Login failed.</p>"
+    if "UNION SELECT" in username.upper():
+        items = "".join(f"<li>{escape(str(user))}: {escape(str(stored_hash))}</li>" for user, stored_hash in rows)
+        content += f"<ul>{items}</ul>"
+    return page(content + '<p><a href="/">Home</a></p>')
 
-        if 'DROP TABLE' in query.upper():
-            try:
-                cur.executescript(query)
-                conn.close()
-                content = "<p style='color:green;'>Table 'users' dropped!</p>"
-            except Exception as e:
-                conn.close()
-                content = f"<p style='color:red;'>Error: {e}</p>"
-        else:
-            cur.execute(query)
-            rows = cur.fetchall()
-            conn.close()
-            if 'UNION SELECT' in query.upper():
-                list_items = "".join(f"<li>{r[0]} : {r[1]}</li>" for r in rows)
-                content = "<p style='color:green;'>Login successful!</p>" + f"<ul>{list_items}</ul>"
-            elif rows:
-                content = "<p style='color:green;'>Login successful!</p>"
-            else:
-                content = "<p style='color:red;'>Login failed.</p>"
-        content += '<p><a href="/">Home</a></p>'
-        return BASE_HTML.format(content=content)
-
-    form = '''<h3>Login</h3>
-<form method="post">
-  <input name="username" placeholder="Username"><br>
-  <input name="password" type="password" placeholder="Password"><br>
-  <button type="submit">Login</button>
-</form>'''
-    return BASE_HTML.format(content=form)
 
 if __name__ == "__main__":
-    # Initialize DB
-    conn = sqlite3.connect(DB)
-    cur = conn.cursor()
-    cur.execute("""
-      CREATE TABLE IF NOT EXISTS users(
-        username TEXT PRIMARY KEY,
-        password TEXT
-      );
-    """)
-    for u,p in [('alice','alicepass'),('bob','bobpass')]:
-        hp = encrypt_pw(p)
-        cur.execute("INSERT OR IGNORE INTO users VALUES(?,?)", (u, hp))
-    conn.commit(); conn.close()
-    threading.Timer(1.0, lambda: webbrowser.open("http://127.0.0.1:5000/", new=2)).start()
-    app.run(debug=True)
+    demo.init_db()
+    app.run(host="127.0.0.1", port=5000, debug=False)

@@ -1,64 +1,62 @@
-import sqlite3, os, re
-from Crypto.Cipher import AES
-from Crypto.Util.Padding import pad, unpad
+"""SQL injection mitigation lab using bound parameters and password hashing."""
+from contextlib import closing
+from pathlib import Path
+import sqlite3
+import re
+from werkzeug.security import check_password_hash, generate_password_hash
 
-# Secure DB and AES key
-def decrypt_pw(hex_str: str) -> str:
-    data = bytes.fromhex(hex_str)
-    iv, ct = data[:AES.block_size], data[AES.block_size:]
-    cipher = AES.new(KEY, AES.MODE_CBC, iv)
-    return unpad(cipher.decrypt(ct), AES.block_size).decode()
+DB = Path(__file__).with_name("demo_protected.sqlite3")
 
-DB = "SapozhnikovSafeDB.db"
-KEY = b'0123456789ABCDEF0123456789ABCDEF'
 
-# Input validation blocks SQLi
-def valid_username(u: str) -> bool:
-    return bool(re.fullmatch(r"[A-Za-z0-9_]{3,20}", u))
+def valid_username(username):
+    return bool(re.fullmatch(r"[A-Za-z0-9_]{3,20}", username))
 
-# Setup DB + secure users
+
 def init_db():
-    conn = sqlite3.connect(DB); cur = conn.cursor()
-    cur.execute("""
-      CREATE TABLE IF NOT EXISTS users(
-        username TEXT PRIMARY KEY,
-        password TEXT
-      );
-    """)
-    for u, p in [('alice','alicepass'),('bob','bobpass')]:
-        hp = encrypt_pw(p)
-        cur.execute("INSERT OR IGNORE INTO users VALUES(?,?)", (u, hp))
-    conn.commit(); conn.close()
+    with closing(sqlite3.connect(DB)) as conn, conn:
+        conn.execute("CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, password TEXT)")
+        for username, password in [("alice", "alicepass"), ("bob", "bobpass")]:
+            conn.execute(
+                "INSERT OR IGNORE INTO users VALUES (?, ?)",
+                (username, generate_password_hash(password, method="scrypt")),
+            )
 
-# Secure register: parameterized + validation
-def register():
-    u = input("New username: ").strip()
-    # Validation prevents quotes, operators
-    if not valid_username(u): print("❌ Invalid username."); return
-    p = input("New password: ")
-    hp = encrypt_pw(p)
-    conn = sqlite3.connect(DB); cur = conn.cursor()
-    # Parameterized query prevents SQL injection
-    cur.execute("INSERT INTO users VALUES(?,?)", (u, hp))
-    conn.commit(); conn.close()
-    print("Registered.")
 
-# Secure login: parameterized SELECT prevents SQLi
-def login():
-    u = input("Username: ").strip()
-    if not valid_username(u): print("❌ Invalid username."); return
-    p = input("Password: ")
-    hp = encrypt_pw(p)
-    conn = sqlite3.connect(DB); cur = conn.cursor()
-    # No f-strings: structure fixed, data separate
-    cur.execute("SELECT * FROM users WHERE username=? AND password=?", (u, hp))
-    if cur.fetchone(): print("🔥 Login successful!")
-    else: print("❌ Login failed.")
-    conn.close()
+def register_user(username, password):
+    if not valid_username(username) or not password or len(password) > 1024:
+        raise ValueError("Use a 3-20 character username (letters, digits, underscore) and a nonempty password up to 1024 characters.")
+    with closing(sqlite3.connect(DB)) as conn, conn:
+        conn.execute(
+            "INSERT INTO users VALUES (?, ?)",
+            (username, generate_password_hash(password, method="scrypt")),
+        )
 
-if __name__ == "__main__":
+
+def authenticate(username, password):
+    if not username or not password or len(username) > 200 or len(password) > 1024:
+        return False
+    # The SQL structure stays fixed even when the username contains SQL syntax.
+    with closing(sqlite3.connect(DB)) as conn:
+        row = conn.execute("SELECT password FROM users WHERE username = ?", (username,)).fetchone()
+    return bool(row and check_password_hash(row[0], password))
+
+
+def main():
     init_db()
     choice = input("Register (R) or Login (L)? ").strip().lower()
-    if choice == 'r': register()
-    else: login()
-    print("\n-- Phase 2 secure: same payloads now fail.")
+    username = input("Username: ").strip()
+    password = input("Password (use demo values only): ")
+    try:
+        if choice == "r":
+            register_user(username, password)
+            print("Registered.")
+        else:
+            print("Login successful!" if authenticate(username, password) else "Login failed.")
+    except ValueError as error:
+        print(error)
+    except sqlite3.IntegrityError:
+        print("That username already exists.")
+
+
+if __name__ == "__main__":
+    main()

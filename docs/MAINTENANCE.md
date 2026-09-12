@@ -31,3 +31,7 @@ The intentionally vulnerable phase remains suitable only for a local learning ex
 All 13 regression test methods passed under Python 3.12 on Linux using Flask 3.1.3 and Werkzeug 3.1.8. This includes repeat legitimate login, registration, incorrect passwords, SQL injection behavior in both phases, duplicate handling, escaped output, distinct salted hashes, and both command-line launchers.
 
 No graphical browser session, Windows execution, or production deployment was part of this verification.
+
+## Portfolio cleanup
+
+The three tracked legacy databases were removed from the current tree; earlier commits retain them. The lab creates its own synthetic data. Both web pages now include page titles, explicit form labels, mobile viewport metadata, and wrapping for long example hashes.

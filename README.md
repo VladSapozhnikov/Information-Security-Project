@@ -92,7 +92,7 @@ The checks use temporary databases and Flask's test client. They cover valid and
 - `tests/`: behavioral regression checks.
 - `docs/`: test plan and repair history.
 
-Each phase creates a new `demo_*.sqlite3` database next to its Python module. Generated databases are ignored by Git. Existing coursework `.db` files are retained as legacy artifacts but are not read or modified by this version.
+Each phase creates a new `demo_*.sqlite3` database next to its Python module. Generated databases are ignored by Git. Legacy coursework `.db` files have been removed from the current tree and remain in Git history. A fresh run creates the synthetic demo accounts; no database download is needed.
 
 To reset the lab, stop both servers and remove only `phase1/demo_vulnerable.sqlite3` and `phase2/demo_protected.sqlite3`. Restart to restore the two demo accounts.
 

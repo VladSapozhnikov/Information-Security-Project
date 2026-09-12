@@ -11,12 +11,14 @@ else:
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024
 BASE_HTML = '''<!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Phase 1: Vulnerable Login</title>
   <style>
-    body {{ display: flex; justify-content: center; align-items: center; height: 100vh; background: #f0f4f8; margin: 0; }}
-    .container {{ background: #e0f3ff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); width: 320px; text-align: center; }}
+    body {{ display: flex; justify-content: center; align-items: center; min-height: 100vh; font-family: system-ui, sans-serif; background: #f0f4f8; margin: 0; }}
+    .container {{ background: #e0f3ff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); width: min(480px, calc(100vw - 72px)); overflow-wrap: anywhere; text-align: center; }}
     input {{ width: 100%; padding: 8px; margin: 8px 0; box-sizing: border-box; }}
     button {{ padding: 8px 16px; margin-top: 10px; }}
     ul {{ text-align: left; padding-left: 20px; }}
@@ -39,8 +41,10 @@ def page(content):
 def form(action):
     return page(f"""<h3>{action.title()}</h3>
 <form method="post">
-  <input name="username" placeholder="Username" required maxlength="200"><br>
-  <input name="password" type="password" placeholder="Password" required maxlength="1024"><br>
+  <label for="username">Username</label>
+  <input id="username" name="username" placeholder="Username" required maxlength="200"><br>
+  <label for="password">Password</label>
+  <input id="password" name="password" type="password" placeholder="Password" required maxlength="1024"><br>
   <button type="submit">{action.title()}</button>
 </form>
 <p>Local lab. Use demo accounts only.</p><a href="/">Home</a>""")
